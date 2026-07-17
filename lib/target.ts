@@ -101,10 +101,24 @@ export async function readTargetState() {
   }
 
   if (nexlaMetrics) {
+    // Nexla currently provides metrics only (Person 1 writes to a Nexla webhook
+    // source; there is no readable deployment dataset yet). Deployment history
+    // must stay anchored to the Person 1 backend so the agent never reasons
+    // over stale local deployments.
+    const deploymentsResponse = await fetchJson<RemoteStatus>("/deployments");
+    const rawDeployments =
+      deploymentsResponse?.deployments ?? deploymentsResponse?.deployment_history;
+    const deployments = normalizeDeployments(rawDeployments);
+
+    store.metrics = nexlaMetrics;
+    if (deployments.length > 0) {
+      store.deployments = deployments;
+    }
+
     return {
-      metrics: nexlaMetrics,
+      metrics: store.metrics,
       deployments: store.deployments,
-      source: "nexla"
+      source: "nexla" as const
     };
   }
 

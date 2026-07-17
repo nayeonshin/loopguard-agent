@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Card,
   Col,
   Descriptions,
@@ -160,6 +161,26 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
                 </Typography.Text>
               </Col>
             </Row>
+
+            {snapshot.authorizationDecision === "DENIED" ? (
+              <Alert
+                type="error"
+                showIcon
+                message="Action denied by policy"
+                description={`Pomerium denied "${snapshot.proposedAction}". ${
+                  [...snapshot.timeline].find(
+                    (event) => event.type === "policy" && event.status === "error"
+                  )?.detail ?? ""
+                }`}
+              />
+            ) : snapshot.state === "ESCALATED" ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="Incident escalated to human on-call"
+                description="Loopguard could not resolve the incident within policy limits and has notified the on-call team."
+              />
+            ) : null}
 
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={12} md={6}>

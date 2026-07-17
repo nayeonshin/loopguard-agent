@@ -7,6 +7,7 @@ import {
   setState
 } from "./store";
 import { readTargetState, restartTarget, rollbackTarget } from "./target";
+import { zeroCall } from "./zero";
 import type { ActionName, AgentSnapshot, PolicyContext } from "./types";
 
 function buildPolicyContext(): PolicyContext {
@@ -141,6 +142,8 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
     result.metrics
   );
 
+  await independentProbe();
+
   if (result.recovered) {
     store.state = "RESOLVED";
     store.proposedAction = "none";
@@ -184,6 +187,8 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
     result.metrics
   );
 
+  await independentProbe();
+
   store.state = result.recovered ? "RESOLVED" : "ESCALATED";
   store.proposedAction = result.recovered ? "none" : nextAction;
   addEvent(
@@ -196,6 +201,50 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
   );
 
   return getSnapshot();
+}
+
+async function independentProbe() {
+  if (
+    process.env.LOOPGUARD_ZERO_LIVE === "true" &&
+    process.env.LOOPGUARD_PROBE_URL
+  ) {
+    try {
+      const response = await zeroCall("http uptime check url status", {
+        url: process.env.LOOPGUARD_PROBE_URL,
+        method: "GET"
+      }, { limit: 3, maxPay: "0.03" });
+
+      const body = response.body as {
+        status?: number;
+        results?: { status?: number }[];
+      };
+      const httpStatus = body?.results?.[0]?.status ?? body?.status;
+      const statusOk =
+        typeof httpStatus === "number" && httpStatus >= 200 && httpStatus < 400;
+      const winner = response.attempts.find((attempt) => attempt.ok);
+      addEvent(
+        "verification",
+        statusOk ? "success" : "warning",
+        "Independent Zero probe",
+        statusOk
+          ? `External probe reached ${process.env.LOOPGUARD_PROBE_URL} with HTTP ${httpStatus}.`
+          : `External probe did not confirm recovery (HTTP ${httpStatus ?? "unknown"}).`,
+        {
+          httpStatus,
+          provider: winner?.provider,
+          runId: winner?.runId,
+          paidUsd: winner?.paidUsd
+        }
+      );
+    } catch (error) {
+      addEvent(
+        "verification",
+        "warning",
+        "Independent Zero probe failed",
+        error instanceof Error ? error.message : "Unknown probe error"
+      );
+    }
+  }
 }
 
 export async function testDeniedDeployCode(): Promise<AgentSnapshot> {

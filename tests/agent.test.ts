@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 import { runAgentCycle, testDeniedDeployCode } from "../lib/agent";
 import { deployBroken, getSnapshot, resetDemo } from "../lib/store";
 
+const previousSimulatorFlag = process.env.LOOPGUARD_USE_LOCAL_SIMULATOR;
 process.env.LOOPGUARD_USE_LOCAL_SIMULATOR = "true";
+
+after(() => {
+  if (previousSimulatorFlag === undefined) {
+    delete process.env.LOOPGUARD_USE_LOCAL_SIMULATOR;
+  } else {
+    process.env.LOOPGUARD_USE_LOCAL_SIMULATOR = previousSimulatorFlag;
+  }
+});
 
 test("healthy polling remains monitoring", async () => {
   resetDemo();

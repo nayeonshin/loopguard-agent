@@ -107,7 +107,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
               icon={<PoweroffOutlined style={{ color: "#ff4d4f" }} />}
               danger
               onClick={() => post("/api/demo/deploy-broken", "break")}
-              disabled={busyAction === "break"}
+              disabled={busyAction !== null}
             >
               Break deployment
             </Menu.Item>
@@ -115,7 +115,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
               key="agent"
               icon={<RocketOutlined />}
               onClick={() => post("/api/agent", "agent")}
-              disabled={busyAction === "agent"}
+              disabled={busyAction !== null}
             >
               Run agent cycle
             </Menu.Item>
@@ -123,7 +123,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
               key="denied"
               icon={<WarningOutlined />}
               onClick={() => post("/api/integrations/denied-action", "denied")}
-              disabled={busyAction === "denied"}
+              disabled={busyAction !== null}
             >
               Test denied action
             </Menu.Item>
@@ -131,7 +131,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
               key="reset"
               icon={<SyncOutlined />}
               onClick={() => post("/api/demo/reset", "reset")}
-              disabled={busyAction === "reset"}
+              disabled={busyAction !== null}
             >
               Reset demo
             </Menu.Item>

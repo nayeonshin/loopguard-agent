@@ -46,6 +46,63 @@ function newestDeployment() {
   )[0];
 }
 
+async function planWithLLM(phase: "initial" | "replan"): Promise<{ hypothesis: string; action: ActionName } | null> {
+  if (process.env.LOOPGUARD_ZERO_LIVE !== "true" || process.env.LOOPGUARD_LLM_PLANNING === "false") {
+    return null;
+  }
+
+  const store = getRuntimeStore();
+  const prompt = `Current metrics: ${JSON.stringify(store.metrics)}
+  Newest deployment: ${JSON.stringify(newestDeployment())}
+  Action counts: ${JSON.stringify(store.actionCounts)}
+  Previous action failed: ${store.previousActionFailed}
+  Phase: ${phase}
+  Allowed actions: ["capture_screenshot","publish_status","notify_team","restart","rollback","deploy_code"]
+  Policy rules (an action is DENIED unless its conditions hold; conditions reference the context above): ${JSON.stringify(policyConfig.actions)}
+  You are the planner for an autonomous on-call agent. Diagnose the likely cause and pick the single best next action that the policy will ALLOW in the current context.
+  Respond with STRICT JSON only, no other text: {"hypothesis": string, "proposed_action": <one allowed action>, "reasoning": string}`;
+
+  try {
+    const response = await zeroCall("qwen llm gateway", {
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 2000
+    }, { limit: 3, maxPay: "0.05" });
+
+    const body = response.body as {
+      content?: string;
+      choices?: { message?: { content?: string } }[];
+    };
+    const assistantText = body.content ?? body.choices?.[0]?.message?.content ?? "";
+    const jsonBlock = assistantText.match(/\{[\s\S]*\}/);
+    if (!jsonBlock) return null;
+
+    const plan = JSON.parse(jsonBlock[0]) as {
+      hypothesis?: string;
+      proposed_action?: string;
+      reasoning?: string;
+    };
+    if (
+      typeof plan.hypothesis !== "string" ||
+      !["capture_screenshot", "publish_status", "notify_team", "restart", "rollback", "deploy_code"].includes(plan.proposed_action ?? "")
+    ) {
+      return null;
+    }
+
+    const winner = response.attempts.find((attempt) => attempt.ok);
+    addEvent("observation", "info", "LLM reasoning (Zero)", plan.reasoning ?? "", {
+      hypothesis: plan.hypothesis,
+      proposed_action: plan.proposed_action,
+      provider: winner?.provider,
+      runId: winner?.runId,
+      paidUsd: winner?.paidUsd
+    });
+
+    return { hypothesis: plan.hypothesis, action: plan.proposed_action as ActionName };
+  } catch (error) {
+    return null;
+  }
+}
+
 async function authorize(action: ActionName) {
   const store = getRuntimeStore();
   store.proposedAction = action;
@@ -115,8 +172,29 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
   setState("PLANNING");
   await executeZeroTool("capture_screenshot");
 
-  let nextAction = proposeNextAction();
+  let plan = await planWithLLM("initial");
+  let nextAction: ActionName;
+  if (plan) {
+    store.hypothesis = plan.hypothesis;
+    nextAction = plan.action;
+  } else {
+    nextAction = proposeNextAction();
+  }
+
   let decision = await authorize(nextAction);
+
+  if (decision.decision === "DENIED" && plan && plan.action !== proposeNextAction()) {
+    const fallbackAction = proposeNextAction();
+    addEvent(
+      "policy",
+      "warning",
+      "LLM plan denied, deterministic fallback armed",
+      `${nextAction} was denied (${decision.reason}); retrying with ${fallbackAction}.`,
+      { denied: nextAction, fallback: fallbackAction }
+    );
+    nextAction = fallbackAction;
+    decision = await authorize(nextAction);
+  }
 
   if (decision.decision === "DENIED") {
     store.state = "ESCALATED";
@@ -160,8 +238,28 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
     { max_attempts: policyConfig.actions.restart.max_attempts }
   );
 
-  nextAction = proposeNextAction();
+  plan = await planWithLLM("replan");
+  if (plan) {
+    store.hypothesis = plan.hypothesis;
+    nextAction = plan.action;
+  } else {
+    nextAction = proposeNextAction();
+  }
+
   decision = await authorize(nextAction);
+
+  if (decision.decision === "DENIED" && plan && plan.action !== proposeNextAction()) {
+    const fallbackAction = proposeNextAction();
+    addEvent(
+      "policy",
+      "warning",
+      "LLM plan denied, deterministic fallback armed",
+      `${nextAction} was denied (${decision.reason}); retrying with ${fallbackAction}.`,
+      { denied: nextAction, fallback: fallbackAction }
+    );
+    nextAction = fallbackAction;
+    decision = await authorize(nextAction);
+  }
 
   if (decision.decision === "DENIED") {
     store.state = "ESCALATED";

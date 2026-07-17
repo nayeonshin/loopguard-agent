@@ -45,11 +45,17 @@ test("healthy state exposes expected content and metrics", async () => {
   assert.equal(healthJson.version, "v1");
   assert.equal(healthJson.health, "healthy");
   assert.equal(healthJson.status, "healthy");
+  assert.equal(healthJson.expected_content_present, true);
 
   const metrics = JSON.parse((await fetchResponse("/metrics")).body);
   assert.equal(metrics.version, "v1");
   assert.equal(metrics.health, "healthy");
   assert.equal(metrics.expected_content_present, true);
+
+  const deployments = JSON.parse((await fetchResponse("/deployments")).body);
+  assert.ok(Array.isArray(deployments.deployments));
+  assert.ok(deployments.deployments[0].created_at);
+  assert.ok(deployments.deployments[0].at);
 });
 
 test("broken deployment, restart, rollback, and reset behave deterministically", async () => {

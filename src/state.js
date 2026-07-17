@@ -19,18 +19,25 @@ const brokenState = {
 const baseState = () => ({
   ...healthyState,
   deploymentHistory: [
-    {
+    addTimestampAliases({
       deploymentId: 1,
       version: "v1",
       type: "initial",
       status: "healthy",
       at: new Date(0).toISOString(),
-    },
+    }),
   ],
   lastAction: "reset",
 });
 
 export const state = baseState();
+
+function addTimestampAliases(entry) {
+  return {
+    ...entry,
+    created_at: entry.at,
+  };
+}
 
 export function resetState() {
   const next = baseState();
@@ -41,13 +48,13 @@ export function deployBroken() {
   Object.assign(state, brokenState);
   state.deploymentHistory = [
     ...state.deploymentHistory,
-    {
+    addTimestampAliases({
       deploymentId: state.deploymentId,
       version: state.version,
       type: "demo/deploy-broken",
       status: "broken",
       at: new Date().toISOString(),
-    },
+    }),
   ];
   state.lastAction = "deploy-broken";
 }
@@ -55,13 +62,13 @@ export function deployBroken() {
 export function restartCurrentVersion() {
   state.deploymentHistory = [
     ...state.deploymentHistory,
-    {
+    addTimestampAliases({
       deploymentId: state.deploymentId,
       version: state.version,
       type: "ops/restart",
       status: state.health,
       at: new Date().toISOString(),
-    },
+    }),
   ];
   state.lastAction = "restart";
 }
@@ -74,13 +81,13 @@ export function rollbackToHealthy() {
   });
   state.deploymentHistory = [
     ...state.deploymentHistory,
-    {
+    addTimestampAliases({
       deploymentId: state.deploymentId,
       version: state.version,
       type: "ops/rollback",
       status: "healthy",
       at: new Date().toISOString(),
-    },
+    }),
   ];
   state.lastAction = "rollback";
 }

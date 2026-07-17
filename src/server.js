@@ -10,7 +10,7 @@ import {
 } from "./state.js";
 import { createIntegrationAdapters } from "./adapters.js";
 
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 4000);
 const adapters = createIntegrationAdapters();
 
 function sendJson(res, statusCode, body) {
@@ -85,6 +85,7 @@ const server = http.createServer((req, res) => {
       version: state.version,
       health: state.health,
       status: state.health,
+      expected_content_present: state.expectedContentPresent,
     });
     return;
   }
@@ -96,6 +97,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && url.pathname === "/deployments") {
     sendJson(res, 200, {
+      deployments: state.deploymentHistory,
       deployment_history: state.deploymentHistory,
     });
     return;

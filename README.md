@@ -1,20 +1,36 @@
-# Loopguard Person 1 Demo Service
+# Loopguard
 
-This service simulates the website and ops surface that Loopguard monitors.
+Loopguard is an autonomous on-call agent MVP for monitoring an intentionally breakable website, investigating regressions, applying safety policy, invoking tools, and showing the full incident timeline.
 
-## Run locally
+## Quick Start
 
-```powershell
+```bash
 npm install
-npm start
+npm run dev
 ```
 
-By default the server listens on port `4000` so it can run alongside a frontend or agent service on `3000`.
+Open `http://localhost:3000`.
 
-## Endpoints
+To run the integrated local demo with Person 1's service:
+
+```bash
+npm run dev:backend
+```
+
+In a second terminal:
+
+```bash
+LOOPGUARD_TARGET_BASE_URL=http://localhost:4000 npm run dev
+```
+
+## Backend Service
+
+Person 1's demo service is included under `src/` and listens on port `4000` by default.
+
+Endpoints:
 
 - `GET /` - Demo website
-- `GET /health` - Health summary
+- `GET /health` - Health summary, including `expected_content_present`
 - `GET /metrics` - Current metrics snapshot
 - `GET /deployments` - Deployment history
 - `POST /demo/deploy-broken` - Trigger the broken deployment
@@ -22,11 +38,25 @@ By default the server listens on port `4000` so it can run alongside a frontend 
 - `POST /ops/restart` - Restart the current version
 - `POST /ops/rollback` - Restore healthy `v1`
 
-## Shared contract notes
+## Demo Flow
 
-- Healthy state is `v1`
-- Broken state is `v2`
-- Restarting `v2` does not recover the service
-- Rolling back to `v1` restores service
-- Deployment records include both `at` and `created_at` timestamps for compatibility with the agent side
-- `/health` includes `expected_content_present` so the detection UI and policy logic can read the content signal without switching endpoints
+1. Start from the healthy `v1` simulator state.
+2. Click **Break deployment**.
+3. Click **Run agent cycle** to detect, investigate, authorize, act, verify, replan, rollback, and resolve.
+4. Click **Test denied action** to show a restricted `deploy_code` action being denied and escalated.
+
+## Configuration
+
+The app defaults to Person 1's service at `http://localhost:4000` and falls back to the built-in simulator if that service is not running.
+
+```bash
+LOOPGUARD_TARGET_BASE_URL=http://localhost:4000 npm run dev
+```
+
+Use `LOOPGUARD_USE_LOCAL_SIMULATOR=true` to force the built-in simulator.
+
+The Person 1 contract is normalized through `lib/target.ts`:
+
+- `/health` is the preferred source for `expected_content_present`.
+- `/deployments` can return either `deployments` or `deployment_history`.
+- Deployment timestamps prefer `created_at`, with `at` as a fallback.

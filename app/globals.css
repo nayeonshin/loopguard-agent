@@ -39,3 +39,21 @@ textarea,
 select {
   font: inherit;
 }
+
+/* Subtle sidebar action on dark background */
+.lg-subtle-btn.ant-btn {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.lg-subtle-btn.ant-btn:hover:not(:disabled) {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.lg-subtle-btn.ant-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+.lg-subtle-btn.ant-btn:disabled {
+  color: rgba(255, 255, 255, 0.3);
+}

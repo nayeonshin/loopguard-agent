@@ -109,6 +109,20 @@ export interface ToolResult {
   artifactUrl?: string;
 }
 
+export interface AutopilotStatus {
+  enabled: boolean;
+  dryRun: boolean;
+  intervalSeconds: number;
+  cooldownUntil: string | null;
+}
+
+export interface SpendStatus {
+  sessionUsd: number;
+  incidentUsd: number;
+  sessionBudgetUsd: number;
+  incidentBudgetUsd: number;
+}
+
 export interface AgentSnapshot {
   metrics: Metrics;
   deployments: Deployment[];
@@ -118,4 +132,6 @@ export interface AgentSnapshot {
   authorizationDecision: AuthorizationDecision | "PENDING" | "NONE";
   timeline: TimelineEvent[];
   actionCounts: Partial<Record<ActionName, number>>;
+  autopilot: AutopilotStatus;
+  spend: SpendStatus;
 }

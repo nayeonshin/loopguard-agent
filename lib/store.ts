@@ -3,10 +3,12 @@ import type {
   AgentSnapshot,
   AgentState,
   AuthorizationDecision,
+  AutopilotStatus,
   Deployment,
   EventStatus,
   EventType,
   Metrics,
+  SpendStatus,
   TimelineEvent
 } from "./types";
 
@@ -21,6 +23,9 @@ interface RuntimeStore {
   actionCounts: Partial<Record<ActionName, number>>;
   previousActionFailed: boolean;
   zeroPrimaryFailed: boolean;
+  autopilot: AutopilotStatus;
+  spendSessionUsd: number;
+  spendIncidentUsd: number;
 }
 
 const startedAt = new Date();
@@ -61,7 +66,15 @@ const initialStore = (): RuntimeStore => ({
   ],
   actionCounts: {},
   previousActionFailed: false,
-  zeroPrimaryFailed: false
+  zeroPrimaryFailed: false,
+  autopilot: {
+    enabled: false,
+    dryRun: process.env.LOOPGUARD_DRY_RUN === "true",
+    intervalSeconds: Number(process.env.LOOPGUARD_AUTOPILOT_INTERVAL_SECONDS || 15),
+    cooldownUntil: null
+  },
+  spendSessionUsd: 0,
+  spendIncidentUsd: 0
 });
 
 declare global {
@@ -70,7 +83,12 @@ declare global {
 
 function getStore() {
   globalThis.loopguardStore ??= initialStore();
-  return globalThis.loopguardStore;
+  const store = globalThis.loopguardStore;
+  // Backfill fields on stores created before they existed (survives HMR/deploys).
+  store.autopilot ??= initialStore().autopilot;
+  store.spendSessionUsd ??= 0;
+  store.spendIncidentUsd ??= 0;
+  return store;
 }
 
 export function addEvent(
@@ -105,7 +123,9 @@ export function getSnapshot(): AgentSnapshot {
     proposedAction: store.proposedAction,
     authorizationDecision: store.authorizationDecision,
     timeline: store.timeline,
-    actionCounts: store.actionCounts
+    actionCounts: store.actionCounts,
+    autopilot: { ...store.autopilot },
+    spend: getSpendStatus()
   };
 }
 
@@ -141,6 +161,7 @@ export function deployBroken() {
   store.previousActionFailed = false;
   store.actionCounts = {};
   store.zeroPrimaryFailed = false;
+  resetIncidentSpend();
   addEvent(
     "metric",
     "warning",
@@ -151,7 +172,12 @@ export function deployBroken() {
 }
 
 export function resetDemo() {
-  globalThis.loopguardStore = initialStore();
+  const oldStore = getStore();
+  const newStore = initialStore();
+  newStore.autopilot = oldStore.autopilot;
+  newStore.spendSessionUsd = oldStore.spendSessionUsd;
+  newStore.spendIncidentUsd = 0;
+  globalThis.loopguardStore = newStore;
   addEvent("state", "success", "Demo reset", "Target returned to healthy v1.");
 }
 
@@ -210,5 +236,35 @@ export function rollbackToHealthy() {
     ok: true,
     recovered: true,
     metrics: store.metrics
+  };
+}
+
+export function recordSpend(usd: number) {
+  const store = getStore();
+  store.spendSessionUsd += usd;
+  store.spendIncidentUsd += usd;
+}
+
+export function resetIncidentSpend() {
+  const store = getStore();
+  store.spendIncidentUsd = 0;
+}
+
+export function isBudgetExceeded(): boolean {
+  const store = getStore();
+  const sessionBudgetUsd = Number(process.env.LOOPGUARD_BUDGET_SESSION || 1);
+  const incidentBudgetUsd = Number(process.env.LOOPGUARD_BUDGET_INCIDENT || 0.25);
+  return store.spendSessionUsd >= sessionBudgetUsd || store.spendIncidentUsd >= incidentBudgetUsd;
+}
+
+export function getSpendStatus(): SpendStatus {
+  const store = getStore();
+  const sessionBudgetUsd = Number(process.env.LOOPGUARD_BUDGET_SESSION || 1);
+  const incidentBudgetUsd = Number(process.env.LOOPGUARD_BUDGET_INCIDENT || 0.25);
+  return {
+    sessionUsd: store.spendSessionUsd,
+    incidentUsd: store.spendIncidentUsd,
+    sessionBudgetUsd,
+    incidentBudgetUsd
   };
 }

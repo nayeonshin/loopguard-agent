@@ -4,7 +4,10 @@ import {
   addEvent,
   getRuntimeStore,
   getSnapshot,
-  setState
+  setState,
+  resetIncidentSpend,
+  isBudgetExceeded,
+  getSpendStatus
 } from "./store";
 import { readTargetState, restartTarget, rollbackTarget } from "./target";
 import { zeroCall } from "./zero";
@@ -116,6 +119,11 @@ async function authorize(action: ActionName) {
 async function act(action: ActionName) {
   setState("ACTING");
 
+  if (getRuntimeStore().autopilot.dryRun) {
+    addEvent("action", "info", "Dry-run: would execute " + action, "Dry-run mode is on, so no mutation or paid call was made.", { action });
+    return { ok: true, recovered: false, metrics: getRuntimeStore().metrics };
+  }
+
   if (action === "restart") {
     return restartTarget();
   }
@@ -149,7 +157,15 @@ export async function runAgentCycle(): Promise<AgentSnapshot> {
     return getSnapshot();
   }
 
+  const previousState = store.state;
   setState("DETECTING");
+  if (previousState === "MONITORING" || previousState === "RESOLVED") {
+    resetIncidentSpend();
+  }
+  if (isBudgetExceeded()) {
+    addEvent("policy", "warning", "Zero budget exhausted", "Paid Zero calls are disabled until budgets reset; the loop continues with deterministic logic and free fallbacks.", getSpendStatus());
+  }
+
   addEvent(
     "metric",
     "warning",

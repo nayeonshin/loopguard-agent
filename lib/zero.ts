@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getRuntimeStore, recordSpend, isBudgetExceeded } from './store';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,6 +45,14 @@ export interface ZeroAttempt {
 }
 
 export async function zeroCall(searchQuery: string, body: unknown, opts: { limit?: number; maxPay?: string; skipFirst?: boolean } = {}): Promise<{ ok: boolean; body: unknown; attempts: ZeroAttempt[] }> {
+  const store = getRuntimeStore();
+  if (store.autopilot.dryRun) {
+    throw new Error("dry-run: paid Zero calls disabled");
+  }
+  if (isBudgetExceeded()) {
+    throw new Error("Zero budget exceeded");
+  }
+
   const { limit = 3, maxPay = process.env.LOOPGUARD_ZERO_MAX_PAY || '0.05', skipFirst = false } = opts;
   const capabilities = await zeroSearch(searchQuery, limit);
 
@@ -67,11 +76,15 @@ export async function zeroCall(searchQuery: string, body: unknown, opts: { limit
   for (const capability of capabilities) {
     try {
       const response = await zeroFetchCapability(capability.token, body, maxPay);
+      const paidUsd = parseFloat(response.payment?.amount || '0');
+      if (paidUsd > 0) {
+        recordSpend(paidUsd);
+      }
       const attempt: ZeroAttempt = {
         provider: capability.brandName || capability.slug,
         capability: capability.slug,
         runId: response.runId,
-        paidUsd: parseFloat(response.payment?.amount || '0'),
+        paidUsd,
         ok: response.ok
       };
       attempts.push(attempt);

@@ -101,46 +101,42 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
           <Typography.Text style={{ fontSize: 24, textAlign: "center", margin: "16px 0", color: "#ffffff" }}>
             Loopguard
           </Typography.Text>
-          <Menu mode="inline" style={{ borderRight: 0 }}>
-            <Menu.Item
-              key="break"
-              icon={<PoweroffOutlined style={{ color: "#ff4d4f" }} />}
-              danger
-              onClick={() => post("/api/demo/deploy-broken", "break")}
-              disabled={busyAction !== null}
-            >
-              Break deployment
-            </Menu.Item>
-            <Menu.Item
-              key="agent"
-              icon={<RocketOutlined />}
-              onClick={() => post("/api/agent", "agent")}
-              disabled={busyAction !== null}
-            >
-              Run agent cycle
-            </Menu.Item>
-            <Menu.Item
-              key="denied"
-              icon={<WarningOutlined />}
-              onClick={() => post("/api/integrations/denied-action", "denied")}
-              disabled={busyAction !== null}
-            >
-              Test denied action
-            </Menu.Item>
-            <Menu.Item
-              key="reset"
-              icon={<SyncOutlined />}
-              onClick={() => post("/api/demo/reset", "reset")}
-              disabled={busyAction !== null}
-            >
-              Reset demo
-            </Menu.Item>
-          </Menu>
+          <Menu mode="inline" style={{ borderRight: 0 }} items={[
+            {
+              key: "break",
+              icon: <PoweroffOutlined style={{ color: "#ff4d4f" }} />,
+              danger: true,
+              onClick: () => post("/api/demo/deploy-broken", "break"),
+              disabled: busyAction !== null,
+              label: "Break deployment"
+            },
+            {
+              key: "agent",
+              icon: <RocketOutlined />,
+              onClick: () => post("/api/agent", "agent"),
+              disabled: busyAction !== null,
+              label: "Run agent cycle"
+            },
+            {
+              key: "denied",
+              icon: <WarningOutlined />,
+              onClick: () => post("/api/integrations/denied-action", "denied"),
+              disabled: busyAction !== null,
+              label: "Test denied action"
+            },
+            {
+              key: "reset",
+              icon: <SyncOutlined />,
+              onClick: () => post("/api/demo/reset", "reset"),
+              disabled: busyAction !== null,
+              label: "Reset demo"
+            }
+          ]} />
         </div>
       </Layout.Sider>
       <Layout>
         <Layout.Header style={{ background: "#111827", padding: "0 28px" }}>
-          <Space direction="horizontal" size="middle">
+          <Space orientation="horizontal" size="middle">
             <Typography.Text style={{ color: "#ffffff" }}>Loopguard</Typography.Text>
             <Typography.Text type="secondary" style={{ color: "#ffffff" }}>
               Autonomous on-call response loop for breakable websites
@@ -153,7 +149,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
           </Space>
         </Layout.Header>
         <Layout.Content style={{ padding: 24, maxWidth: 1200, margin: "0 auto", background: "#ffffff" }}>
-          <Space direction="vertical" size="large" style={{ width: "100%" }}>
+          <Space orientation="vertical" size="large" style={{ width: "100%" }}>
             <Row justify="space-between" align="top" gutter={[16, 16]}>
               <Col>
                 <Typography.Title level={3} style={{ margin: 0 }}>
@@ -167,7 +163,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
 
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={12} md={6}>
-                <Card bordered={false}>
+                <Card variant="borderless">
                   <Typography.Text type="secondary">Website status</Typography.Text>
                   <div style={{ margin: "8px 0" }}>
                     <Tag color={statusColor(snapshot.metrics.health)} style={{ fontSize: 14, padding: "4px 8px" }}>
@@ -180,7 +176,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
                 </Card>
               </Col>
               <Col xs={24} sm={12} md={6}>
-                <Card bordered={false}>
+                <Card variant="borderless">
                   <Typography.Text type="secondary">Version</Typography.Text>
                   <div style={{ margin: "8px 0", fontSize: 24, fontWeight: 500 }}>
                     {snapshot.metrics.version}
@@ -191,7 +187,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
                 </Card>
               </Col>
               <Col xs={24} sm={12} md={6}>
-                <Card bordered={false}>
+                <Card variant="borderless">
                   <Typography.Text type="secondary">Error rate</Typography.Text>
                   <div style={{ margin: "8px 0", fontSize: 24, fontWeight: 500 }}>
                     {percent(snapshot.metrics.error_rate)}
@@ -203,7 +199,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
                 </Card>
               </Col>
               <Col xs={24} sm={12} md={6}>
-                <Card bordered={false}>
+                <Card variant="borderless">
                   <Typography.Text type="secondary">Latency</Typography.Text>
                   <div style={{ margin: "8px 0", fontSize: 24, fontWeight: 500 }}>
                     {snapshot.metrics.latency_ms}ms
@@ -217,7 +213,7 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
 
             <Row gutter={[16, 16]}>
               <Col xs={24} lg={12}>
-                <Card title="Agent Control Plane" bordered={false}>
+                <Card title="Agent Control Plane" variant="borderless">
                   <Descriptions column={1} layout="horizontal" colon={false}>
                     <Descriptions.Item label="Agent state">
                       <Tag color={statusColor(snapshot.state)}>{snapshot.state}</Tag>
@@ -243,29 +239,26 @@ export function Dashboard({ initialSnapshot }: { initialSnapshot: AgentSnapshot 
               </Col>
 
               <Col xs={24} lg={12}>
-                <Card title="Incident Timeline" bordered={false}>
-                  <Timeline mode="left">
-                    {snapshot.timeline.map((event) => (
-                      <Timeline.Item
-                        key={`${event.timestamp}-${event.title}-${event.detail}`}
-                        label={new Date(event.timestamp).toLocaleTimeString()}
-                        color={timelineColor(event.status)}
-                      >
-                        <Space direction="vertical" size="small">
-                          <Space size="middle">
-                            <Typography.Text strong>{event.title}</Typography.Text>
-                            <Tag color={statusColor(event.status)}>{event.type}</Tag>
-                          </Space>
-                          <Typography.Text type="secondary">{event.detail}</Typography.Text>
-                          {event.metadata ? (
-                            <pre style={{ margin: 0, background: "#fafafa", padding: 8, borderRadius: 4, fontSize: 12 }}>
-                              {JSON.stringify(event.metadata, null, 2)}
-                            </pre>
-                          ) : null}
+                <Card title="Incident Timeline" variant="borderless">
+                  <Timeline items={snapshot.timeline.map((event) => ({
+                    key: `${event.timestamp}-${event.title}-${event.detail}`,
+                    title: new Date(event.timestamp).toLocaleTimeString(),
+                    color: timelineColor(event.status),
+                    content: (
+                      <Space orientation="vertical" size="small">
+                        <Space size="middle">
+                          <Typography.Text strong>{event.title}</Typography.Text>
+                          <Tag color={statusColor(event.status)}>{event.type}</Tag>
                         </Space>
-                      </Timeline.Item>
-                    ))}
-                  </Timeline>
+                        <Typography.Text type="secondary">{event.detail}</Typography.Text>
+                        {event.metadata ? (
+                          <pre style={{ margin: 0, background: "#fafafa", padding: 8, borderRadius: 4, fontSize: 12 }}>
+                            {JSON.stringify(event.metadata, null, 2)}
+                          </pre>
+                        ) : null}
+                      </Space>
+                    )
+                  }))} mode="start" />
                 </Card>
               </Col>
             </Row>

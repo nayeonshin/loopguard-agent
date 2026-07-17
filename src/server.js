@@ -2,16 +2,21 @@ import http from "node:http";
 import { URL } from "node:url";
 import {
   deployBroken,
-  metricsSnapshot,
   resetState,
   restartCurrentVersion,
   rollbackToHealthy,
   state,
+  stateSnapshot,
 } from "./state.js";
 import { createIntegrationAdapters } from "./adapters.js";
 
 const port = Number(process.env.PORT || 4000);
 const adapters = createIntegrationAdapters();
+const nexlaHeartbeatIntervalMs = Number(process.env.NEXLA_HEARTBEAT_INTERVAL_MS || 0);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function sendJson(res, statusCode, body) {
   const payload = JSON.stringify(body);
@@ -59,9 +64,7 @@ function renderHomePage() {
 
 function buildStatusResponse() {
   return {
-    ...metricsSnapshot(),
-    last_action: state.lastAction,
-    deployment_history: state.deploymentHistory,
+    ...stateSnapshot(),
     adapters: adapters.describe(),
   };
 }
@@ -71,10 +74,32 @@ function withMethodNotAllowed(res, allowed) {
   res.end();
 }
 
-const server = http.createServer((req, res) => {
+async function publishIncidentEvent(eventType) {
+  const result = await adapters.nexla.sendProbe(eventType);
+  return {
+    nexla: result,
+  };
+}
+
+function startNexlaHeartbeat() {
+  if (!adapters.nexla.enabled || nexlaHeartbeatIntervalMs <= 0) {
+    return;
+  }
+
+  const timer = setInterval(() => {
+    void adapters.nexla.sendProbe("heartbeat");
+  }, nexlaHeartbeatIntervalMs);
+
+  timer.unref();
+}
+
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
   if (req.method === "GET" && url.pathname === "/") {
+    if (state.health === "degraded") {
+      await sleep(state.latencyMs);
+    }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(renderHomePage());
     return;
@@ -105,40 +130,48 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/demo/deploy-broken") {
     deployBroken();
+    const integrations = await publishIncidentEvent("deploy-broken");
     sendJson(res, 200, {
       ok: true,
       action: "deploy-broken",
       ...buildStatusResponse(),
+      integrations,
     });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/demo/reset") {
     resetState();
+    const integrations = await publishIncidentEvent("reset");
     sendJson(res, 200, {
       ok: true,
       action: "reset",
       ...buildStatusResponse(),
+      integrations,
     });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/ops/restart") {
     restartCurrentVersion();
+    const integrations = await publishIncidentEvent("restart");
     sendJson(res, 200, {
       ok: true,
       action: "restart",
       ...buildStatusResponse(),
+      integrations,
     });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/ops/rollback") {
     rollbackToHealthy();
+    const integrations = await publishIncidentEvent("rollback");
     sendJson(res, 200, {
       ok: true,
       action: "rollback",
       ...buildStatusResponse(),
+      integrations,
     });
     return;
   }
@@ -157,6 +190,10 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, () => {
   console.log(`Loopguard demo server listening on http://localhost:${port}`);
+  if (!adapters.describe().nexlaConfigured && adapters.describe().nexlaRequired) {
+    console.warn("Nexla is required for the hackathon flow but NEXLA_WEBHOOK_URL is not configured.");
+  }
+  startNexlaHeartbeat();
 });
 
 export { server };

@@ -16,27 +16,36 @@ const brokenState = {
   deploymentId: 2,
 };
 
-const baseState = () => ({
-  ...healthyState,
-  deploymentHistory: [
-    addTimestampAliases({
-      deploymentId: 1,
-      version: "v1",
-      type: "initial",
-      status: "healthy",
-      at: new Date(0).toISOString(),
-    }),
-  ],
-  lastAction: "reset",
-});
-
-export const state = baseState();
-
 function addTimestampAliases(entry) {
   return {
     ...entry,
     created_at: entry.at,
   };
+}
+
+function createInitialDeployment() {
+  return addTimestampAliases({
+    deploymentId: 1,
+    version: "v1",
+    type: "initial",
+    status: "healthy",
+    at: new Date(0).toISOString(),
+  });
+}
+
+const baseState = () => ({
+  ...healthyState,
+  deploymentHistory: [createInitialDeployment()],
+  lastAction: "reset",
+});
+
+export const state = baseState();
+
+function appendDeployment(entry) {
+  state.deploymentHistory = [
+    ...state.deploymentHistory,
+    addTimestampAliases(entry),
+  ];
 }
 
 export function resetState() {
@@ -45,31 +54,31 @@ export function resetState() {
 }
 
 export function deployBroken() {
-  Object.assign(state, brokenState);
-  state.deploymentHistory = [
-    ...state.deploymentHistory,
-    addTimestampAliases({
-      deploymentId: state.deploymentId,
-      version: state.version,
-      type: "demo/deploy-broken",
-      status: "broken",
-      at: new Date().toISOString(),
-    }),
-  ];
+  const nextId = state.deploymentId >= brokenState.deploymentId
+    ? state.deploymentId + 1
+    : brokenState.deploymentId;
+  Object.assign(state, {
+    ...brokenState,
+    deploymentId: nextId,
+  });
+  appendDeployment({
+    deploymentId: state.deploymentId,
+    version: state.version,
+    type: "demo/deploy-broken",
+    status: "degraded",
+    at: new Date().toISOString(),
+  });
   state.lastAction = "deploy-broken";
 }
 
 export function restartCurrentVersion() {
-  state.deploymentHistory = [
-    ...state.deploymentHistory,
-    addTimestampAliases({
-      deploymentId: state.deploymentId,
-      version: state.version,
-      type: "ops/restart",
-      status: state.health,
-      at: new Date().toISOString(),
-    }),
-  ];
+  appendDeployment({
+    deploymentId: state.deploymentId,
+    version: state.version,
+    type: "ops/restart",
+    status: state.health,
+    at: new Date().toISOString(),
+  });
   state.lastAction = "restart";
 }
 
@@ -79,16 +88,13 @@ export function rollbackToHealthy() {
     ...healthyState,
     deploymentId: nextId,
   });
-  state.deploymentHistory = [
-    ...state.deploymentHistory,
-    addTimestampAliases({
-      deploymentId: state.deploymentId,
-      version: state.version,
-      type: "ops/rollback",
-      status: "healthy",
-      at: new Date().toISOString(),
-    }),
-  ];
+  appendDeployment({
+    deploymentId: state.deploymentId,
+    version: state.version,
+    type: "ops/rollback",
+    status: "healthy",
+    at: new Date().toISOString(),
+  });
   state.lastAction = "rollback";
 }
 
@@ -99,5 +105,14 @@ export function metricsSnapshot() {
     error_rate: state.errorRate,
     latency_ms: state.latencyMs,
     expected_content_present: state.expectedContentPresent,
+  };
+}
+
+export function stateSnapshot() {
+  return {
+    ...metricsSnapshot(),
+    deployment_id: state.deploymentId,
+    last_action: state.lastAction,
+    deployment_history: state.deploymentHistory,
   };
 }

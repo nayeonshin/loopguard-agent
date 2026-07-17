@@ -40,10 +40,12 @@ Endpoints:
 
 ## Demo Flow
 
-1. Start from the healthy `v1` simulator state.
-2. Click **Break deployment**.
-3. Click **Run agent cycle** to detect, investigate, authorize, act, verify, replan, rollback, and resolve.
-4. Click **Test denied action** to show a restricted `deploy_code` action being denied and escalated.
+1. Start from the healthy `v1` state.
+2. Trigger the broken deployment.
+3. Observe the homepage degrade and the health signals flip.
+4. Restart to confirm the issue stays broken.
+5. Roll back to restore service.
+6. Reset to return the demo to its clean baseline.
 
 ## Configuration
 
@@ -55,8 +57,22 @@ LOOPGUARD_TARGET_BASE_URL=http://localhost:4000 npm run dev
 
 Use `LOOPGUARD_USE_LOCAL_SIMULATOR=true` to force the built-in simulator.
 
-The Person 1 contract is normalized through `lib/target.ts`:
+The Person 1 backend contract is normalized through `lib/target.ts`:
 
 - `/health` is the preferred source for `expected_content_present`.
 - `/deployments` can return either `deployments` or `deployment_history`.
 - Deployment timestamps prefer `created_at`, with `at` as a fallback.
+
+## Shared Contract Notes
+
+- Healthy state is `v1`.
+- Broken state is `v2`, and the homepage itself visibly degrades instead of only reporting a synthetic flag.
+- Restarting `v2` does not recover the service.
+- Rolling back to `v1` restores service.
+- Reset always returns the service to the original healthy baseline.
+- Repeated incident cycles are deterministic: break -> restart -> rollback -> reset can be repeated without changing the contract.
+- Deployment records include both `at` and `created_at` timestamps for compatibility with the agent side.
+- Deployment history uses consistent `status` values (`healthy` or `degraded`) and stable `type` values (`initial`, `demo/deploy-broken`, `ops/restart`, `ops/rollback`).
+- `/health` includes `expected_content_present` so the detection UI and policy logic can read the content signal without switching endpoints.
+- Incident lifecycle actions publish live Nexla events through `NEXLA_WEBHOOK_URL`.
+- If Nexla is not configured, the service still runs locally and reports adapter readiness in `/metrics`.

@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "next dev",
     "dev:backend": "node src/server.js",
+    "start": "node src/server.js",
     "build": "next build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:agent && npm run test:backend",
-    "test:agent": "node --import tsx --test tests/*.test.ts",
-    "test:backend": "node --test test/*.test.js"
+    "test:agent": "node --import tsx --test tests/agent.test.ts tests/policy.test.ts tests/target.test.ts",
+    "test:backend": "node --test test/server.test.js"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",

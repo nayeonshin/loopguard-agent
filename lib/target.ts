@@ -67,61 +67,6 @@ function normalizeDeployments(raw: RemoteDeployment[] | undefined): Deployment[]
 
 export async function readTargetState() {
   const store = getRuntimeStore();
-  const nexlaMetricsUrl = process.env.NEXLA_METRICS_URL;
-  let nexlaMetrics: Metrics | null = null;
-
-  if (nexlaMetricsUrl) {
-    try {
-      const headers: HeadersInit = {};
-      if (process.env.NEXLA_SERVICE_KEY) {
-        headers["Authorization"] = `Bearer ${process.env.NEXLA_SERVICE_KEY}`;
-      }
-      const response = await fetch(nexlaMetricsUrl, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-        signal: AbortSignal.timeout(900)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const records = Array.isArray(data) ? data : data.records;
-        const lastRecord = records[records.length - 1];
-        nexlaMetrics = {
-          version: lastRecord.version ?? store.metrics.version,
-          health: lastRecord.health ?? lastRecord.status ?? store.metrics.health,
-          error_rate: lastRecord.error_rate ?? store.metrics.error_rate,
-          latency_ms: lastRecord.latency_ms ?? store.metrics.latency_ms,
-          expected_content_present: lastRecord.expected_content_present ?? store.metrics.expected_content_present
-        };
-      }
-    } catch {
-      // Fall through to existing behavior
-    }
-  }
-
-  if (nexlaMetrics) {
-    // Nexla currently provides metrics only (Person 1 writes to a Nexla webhook
-    // source; there is no readable deployment dataset yet). Deployment history
-    // must stay anchored to the Person 1 backend so the agent never reasons
-    // over stale local deployments.
-    const deploymentsResponse = await fetchJson<RemoteStatus>("/deployments");
-    const rawDeployments =
-      deploymentsResponse?.deployments ?? deploymentsResponse?.deployment_history;
-    const deployments = normalizeDeployments(rawDeployments);
-
-    store.metrics = nexlaMetrics;
-    if (deployments.length > 0) {
-      store.deployments = deployments;
-    }
-
-    return {
-      metrics: store.metrics,
-      deployments: store.deployments,
-      source: "nexla" as const
-    };
-  }
-
   const [health, metrics, deploymentsResponse] = await Promise.all([
     fetchJson<Health>("/health"),
     fetchJson<RemoteStatus>("/metrics"),

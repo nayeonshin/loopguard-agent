@@ -1,78 +1,154 @@
 # Loopguard
 
-Loopguard is an autonomous on-call agent MVP for monitoring an intentionally breakable website, investigating regressions, applying safety policy, invoking tools, and showing the full incident timeline.
+Loopguard is an autonomous on-call agent demo. It monitors a real breakable web service, investigates regressions, applies policy-guarded recovery actions, verifies outcomes, and publishes incident signals to Nexla.
+
+## What Runs Where
+
+- Frontend and agent UI: `http://localhost:3000`
+- Person 1 monitored service: `http://localhost:4000`
+- Nexla publishing: outbound webhook calls from the backend on service state changes
 
 ## Quick Start
 
+1. Install dependencies:
+
 ```bash
 npm install
-npm run dev
 ```
 
-Open `http://localhost:3000`.
-
-To run the integrated local demo with Person 1's service:
+2. Start the Person 1 backend:
 
 ```bash
 npm run dev:backend
 ```
 
-In a second terminal:
+3. Start the Next.js frontend in a second terminal.
 
-```bash
-LOOPGUARD_TARGET_BASE_URL=http://localhost:4000 npm run dev
+PowerShell:
+
+```powershell
+$env:LOOPGUARD_TARGET_BASE_URL="http://localhost:4000"
+npm run dev
 ```
 
-## Backend Service
+Command Prompt:
 
-Person 1's demo service is included under `src/` and listens on port `4000` by default.
+```cmd
+set LOOPGUARD_TARGET_BASE_URL=http://localhost:4000
+npm run dev
+```
+
+4. Open `http://localhost:3000`.
+
+## Running the Full Demo
+
+Baseline flow:
+
+1. Confirm the backend homepage on `http://localhost:4000` shows healthy `v1` content including `Checkout`.
+2. Trigger `POST /demo/deploy-broken`.
+3. Confirm the homepage is actually broken and `expected_content_present` becomes `false`.
+4. Trigger `POST /ops/restart` and confirm the service stays broken.
+5. Trigger `POST /ops/rollback` and confirm the homepage and health signals recover.
+6. Trigger `POST /demo/reset` and confirm the system returns to the original healthy baseline.
+
+## Backend Service Contract
+
+The monitored service lives under `src/` and listens on port `4000` by default.
 
 Endpoints:
 
-- `GET /` - Demo website
-- `GET /health` - Health summary, including `expected_content_present`
-- `GET /metrics` - Current metrics snapshot
-- `GET /deployments` - Deployment history
-- `POST /demo/deploy-broken` - Trigger the broken deployment
-- `POST /demo/reset` - Return to the healthy baseline
-- `POST /ops/restart` - Restart the current version
-- `POST /ops/rollback` - Restore healthy `v1`
+- `GET /` - monitored website
+- `GET /health` - health summary, including `expected_content_present`
+- `GET /metrics` - current metrics snapshot and Nexla adapter readiness
+- `GET /deployments` - deployment history
+- `POST /demo/deploy-broken` - trigger the broken deployment
+- `POST /demo/reset` - return to the healthy baseline
+- `POST /ops/restart` - restart the current version
+- `POST /ops/rollback` - restore healthy `v1`
 
-## Demo Flow
-
-1. Start from the healthy `v1` state.
-2. Trigger the broken deployment.
-3. Observe the homepage degrade and the health signals flip.
-4. Restart to confirm the issue stays broken.
-5. Roll back to restore service.
-6. Reset to return the demo to its clean baseline.
-
-## Configuration
-
-The app defaults to Person 1's service at `http://localhost:4000` and falls back to the built-in simulator if that service is not running.
-
-```bash
-LOOPGUARD_TARGET_BASE_URL=http://localhost:4000 npm run dev
-```
-
-Use `LOOPGUARD_USE_LOCAL_SIMULATOR=true` to force the built-in simulator.
-
-The Person 1 backend contract is normalized through `lib/target.ts`:
-
-- `/health` is the preferred source for `expected_content_present`.
-- `/deployments` can return either `deployments` or `deployment_history`.
-- Deployment timestamps prefer `created_at`, with `at` as a fallback.
-
-## Shared Contract Notes
+Contract guarantees:
 
 - Healthy state is `v1`.
-- Broken state is `v2`, and the homepage itself visibly degrades instead of only reporting a synthetic flag.
+- Broken state is `v2`.
+- The broken state is real request-path behavior, not only a synthetic flag.
 - Restarting `v2` does not recover the service.
 - Rolling back to `v1` restores service.
 - Reset always returns the service to the original healthy baseline.
-- Repeated incident cycles are deterministic: break -> restart -> rollback -> reset can be repeated without changing the contract.
-- Deployment records include both `at` and `created_at` timestamps for compatibility with the agent side.
-- Deployment history uses consistent `status` values (`healthy` or `degraded`) and stable `type` values (`initial`, `demo/deploy-broken`, `ops/restart`, `ops/rollback`).
-- `/health` includes `expected_content_present` so the detection UI and policy logic can read the content signal without switching endpoints.
-- Incident lifecycle actions publish live Nexla events through `NEXLA_WEBHOOK_URL`.
-- If Nexla is not configured, the service still runs locally and reports adapter readiness in `/metrics`.
+- Repeated cycles are deterministic: `break -> restart -> rollback -> reset`.
+- `/health` includes `expected_content_present`.
+- `/deployments` returns both `deployments` and `deployment_history`.
+- Deployment records include both `created_at` and `at`.
+
+## Nexla Configuration
+
+Nexla is part of the hackathon flow. The backend publishes structured incident events through a Nexla webhook when service state changes.
+
+Set these environment variables before starting `npm run dev:backend`:
+
+PowerShell:
+
+```powershell
+$env:NEXLA_WEBHOOK_URL="<your Nexla hosted webhook URL>"
+$env:NEXLA_AUTH_HEADER="Authorization"
+$env:NEXLA_AUTH_TOKEN="<optional token if your source requires one>"
+npm run dev:backend
+```
+
+Command Prompt:
+
+```cmd
+set NEXLA_WEBHOOK_URL=<your Nexla hosted webhook URL>
+set NEXLA_AUTH_HEADER=Authorization
+set NEXLA_AUTH_TOKEN=<optional token if your source requires one>
+npm run dev:backend
+```
+
+Notes:
+
+- Do not commit the live Nexla webhook URL or token.
+- If Nexla is misconfigured or unavailable, local endpoints still respond and `/metrics` reports Nexla readiness.
+- The backend emits lifecycle events for broken deploy, restart, rollback, and reset.
+
+## Frontend and Agent Configuration
+
+The frontend targets the Person 1 backend through `LOOPGUARD_TARGET_BASE_URL`.
+
+Supported API routes under `app/api/` include:
+
+- `agent`
+- `autopilot`
+- `demo/deploy-broken`
+- `demo/reset`
+- `deployments`
+- `events`
+- `health`
+- `integrations/denied-action`
+- `metrics`
+- `ops/restart`
+- `ops/rollback`
+
+The target integration is normalized through `lib/target.ts`:
+
+- `/health` is the preferred source for `expected_content_present`
+- `/deployments` accepts either `deployments` or `deployment_history`
+- deployment timestamps prefer `created_at`, with `at` as a fallback
+
+## Tests
+
+Backend tests:
+
+```bash
+npm run test:backend
+```
+
+Agent and frontend-side logic tests:
+
+```bash
+npm run test:agent
+```
+
+Run the full test suite:
+
+```bash
+npm test
+```
